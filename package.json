@@ -1,0 +1,49 @@
+{
+	"name": "oura-mcp-for-claude",
+	"version": "0.2.0",
+	"description": "Your own private, read-only Oura Ring MCP server for Claude (web, desktop and mobile), deployed to Cloudflare Workers with OAuth and a single-user lock.",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Jerebearz/oura-mcp-for-claude.git"
+	},
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"oura",
+		"oura-ring",
+		"claude",
+		"claude-connector",
+		"cloudflare-workers",
+		"oauth",
+		"health",
+		"sleep",
+		"hrv"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"setup": "node scripts/setup.mjs",
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"cf-typegen": "wrangler types",
+		"type-check": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@cloudflare/workers-oauth-provider": "^1.2.3",
+		"@modelcontextprotocol/server": "2.0.0",
+		"agents": "^0.28.0",
+		"zod": "^4.6.6"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^5.20261011.1",
+		"@types/node": "^26.6.5",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.3",
+		"wrangler": "^4.149.0"
+	}
+}

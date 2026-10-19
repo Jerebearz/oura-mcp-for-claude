@@ -1,0 +1,48 @@
+/**
+ * personal-oura-mcp — Wrangler configuration.
+ *
+ * Nothing here is user-specific, so you should not need to edit this file.
+ *  - The KV namespace is created automatically on first deploy (npm run setup).
+ *  - The public URL is taken from the request (your workers.dev address).
+ *    Set PUBLIC_BASE_URL only for a custom domain.
+ *
+ * Secrets are never stored here. `npm run setup` sets them for you, or:
+ *   npx wrangler secret put OURA_CLIENT_ID
+ *   npx wrangler secret put OURA_CLIENT_SECRET
+ *   npx wrangler secret put COOKIE_ENCRYPTION_KEY
+ *   npx wrangler secret put ALLOWED_OURA_USER_ID
+ *   npx wrangler secret put TIMEZONE            (IANA name, e.g. Asia/Hong_Kong)
+ * For local dev, put them in .dev.vars (gitignored); see .dev.vars.example.
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "personal-oura-mcp",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"workers_dev": true,
+	"preview_urls": false,
+	"kv_namespaces": [
+		{
+			// Stores OAuth grants and client registrations (tokens are hashed, props encrypted).
+			// No id needed: Wrangler provisions it on first deploy and reuses it afterwards.
+			"binding": "OAUTH_KV"
+		}
+	],
+	"ratelimits": [
+		{
+			// Per-connection tool-call limit (Workers Rate Limiting binding).
+			"name": "TOOL_RATE_LIMITER",
+			"namespace_id": "1001",
+			"simple": { "limit": 30, "period": 60 }
+		}
+	],
+	"observability": {
+		"enabled": true,
+		// Request/response bodies are never logged; only status lines.
+		"head_sampling_rate": 1
+	},
+	"dev": {
+		"port": 8788
+	}
+}
