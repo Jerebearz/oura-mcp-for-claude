@@ -1,0 +1,28 @@
+# Oura MCP for Claude
+
+> A self-hosted, single-user, read-only remote MCP server (Streamable HTTP) that connects Claude (claude.ai, Claude Desktop, Claude iOS/Android) to the user's own Oura Ring data. It runs on Cloudflare Workers (free plan), uses Oura OAuth, and is locked to one Oura account. Each user deploys their own copy; there is no shared hosted instance.
+
+Key facts:
+- Setup: `git clone https://github.com/Jerebearz/oura-mcp-for-claude && cd oura-mcp-for-claude && npm install && npm run setup` (interactive), or the Deploy to Cloudflare button, followed by the deployed Worker's home page checklist.
+- Diagnose: `npm run doctor -- --json` (non-interactive; never prints secrets) or `GET https://<worker>/status` (JSON: ready, checks, oura_app_form, next_step).
+- Connector URL to add in Claude (Settings → Connectors → Add custom connector): `https://<worker>/mcp`. Leave the OAuth fields empty.
+- Requires an active Oura membership. Oura personal access tokens were retired in December 2025; OAuth is the only way in.
+- Settings (Cloudflare secrets): OURA_CLIENT_ID, OURA_CLIENT_SECRET, ALLOWED_OURA_USER_ID, TIMEZONE (IANA). Optional: PUBLIC_BASE_URL, COOKIE_ENCRYPTION_KEY.
+- Tools (all read-only; start_date/end_date YYYY-MM-DD; default last 7 days, max 90): get_daily_readiness, get_daily_sleep, get_sleep_sessions, get_daily_activity, get_heart_rate, get_workouts, get_daily_stress, get_daily_resilience, get_daily_spo2, get_vo2_max, get_cardiovascular_age.
+- Agents must never ask users to paste the Oura Client Secret or tokens into chat.
+
+## Docs
+- [README](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/README.md): setup options, tools, security model, troubleshooting, FAQ
+- [AGENTS.md](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/AGENTS.md): instructions for AI agents: setup, diagnosis, architecture, invariants, adding tools
+- [SECURITY.md](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/SECURITY.md): security design and reporting
+
+## Code
+- [src/tools.ts](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/src/tools.ts): tool definitions
+- [src/auth-handler.ts](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/src/auth-handler.ts): OAuth consent, Oura callback, allowlist, /setup, /status
+- [scripts/setup.mjs](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/scripts/setup.mjs): guided setup
+- [scripts/doctor.mjs](https://github.com/Jerebearz/oura-mcp-for-claude/blob/main/scripts/doctor.mjs): health check
+
+## Optional
+- [Oura API v2 docs](https://cloud.ouraring.com/v2/docs)
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- [Cloudflare workers-oauth-provider](https://github.com/cloudflare/workers-oauth-provider)

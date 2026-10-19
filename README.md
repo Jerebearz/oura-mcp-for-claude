@@ -1,6 +1,13 @@
-# Personal Oura MCP
+# Oura MCP for Claude
 
-**Your own private Oura Ring connector for Claude.** It works on claude.ai, Claude Desktop and the **Claude mobile apps**, runs free on Cloudflare Workers, and can only ever be used by **your** Oura account.
+[![CI](https://github.com/Jerebearz/oura-mcp-for-claude/actions/workflows/ci.yml/badge.svg)](https://github.com/Jerebearz/oura-mcp-for-claude/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Jerebearz/oura-mcp-for-claude)
+
+**Your own private Oura Ring connector for Claude.** It's a remote MCP server that gives Claude **read-only** access to *your* Oura data: sleep, readiness, HRV, heart rate, activity, workouts, stress, resilience, SpO2, VO2 max and cardiovascular age.
+- Works in **claude.ai, Claude Desktop and the Claude iOS/Android apps**.
+- Runs free on Cloudflare Workers.
+- Locked to **your** Oura account.
 
 Ask Claude things like:
 
@@ -8,19 +15,29 @@ Ask Claude things like:
 - *"Did late workouts hurt my deep sleep this week?"*
 - *"Compare my resting heart rate on days I hit 10k steps vs. days I didn't."*
 
-It's a [remote MCP server](https://modelcontextprotocol.io) that signs you in with Oura (OAuth), checks that the Oura account is yours, and then gives Claude **read-only** access to your data through 11 tools.
+> Not affiliated with Oura or Anthropic. Uses the official [Oura API v2](https://cloud.ouraring.com/v2/docs) with OAuth. Oura retired personal access tokens in December 2025, so OAuth is now the only way in.
 
-> Not affiliated with Oura or Anthropic. Uses the official [Oura API v2](https://cloud.ouraring.com/v2/docs). Oura retired personal access tokens in December 2025, so OAuth (what this uses) is now the only way in.
+**You need:**
+- an Oura account with an **active membership** (API access requires it),
+- a free [Cloudflare account](https://dash.cloudflare.com/sign-up),
+- a Claude plan that supports custom connectors.
 
 ---
 
-## Quick start (about 15 minutes)
+## Setup: pick one (about 10–15 minutes)
 
-**You need:**
-- An Oura account with an active membership. API access requires one.
-- A free [Cloudflare](https://dash.cloudflare.com/sign-up) account.
-- [Node.js 22 LTS](https://nodejs.org) and [Git](https://git-scm.com/downloads).
-- A Claude plan that supports custom connectors.
+### Option A: Deploy button (browser only, no terminal)
+
+1. Click **[Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/Jerebearz/oura-mcp-for-claude)**. Cloudflare copies this repo to your GitHub, creates the storage and deploys.
+2. When it asks for **`OURA_CLIENT_ID`** and **`OURA_CLIENT_SECRET`**, enter `pending` if you don't have an Oura app yet. For **`TIMEZONE`**, enter yours, e.g. `Europe/London`.
+3. Open your new Worker's URL (`https://<name>.<you>.workers.dev`). **The home page is a setup checklist.** It shows the exact values to paste into Oura's developer-app form for *your* deployment, and where to put each secret. Refresh it as you go.
+4. When everything is ticked, add `<your URL>/mcp` in Claude (see [Add it to Claude](#add-it-to-claude)).
+
+> The Deploy-button flow is new. If anything looks off, use Option B or [open an issue](https://github.com/Jerebearz/oura-mcp-for-claude/issues).
+
+### Option B: guided terminal setup (tested end to end)
+
+You need [Node.js 22 LTS](https://nodejs.org) and [Git](https://git-scm.com/downloads).
 
 ```sh
 git clone https://github.com/Jerebearz/oura-mcp-for-claude.git
@@ -29,33 +46,36 @@ npm install
 npm run setup
 ```
 
-`npm run setup` walks you through everything and checks each step:
+`npm run setup` walks you through everything, checks each step, and can be re-run any time:
 
 1. **Logs in to Cloudflare** in your browser.
-2. **Deploys the server** and creates its storage. You get a URL like `https://personal-oura-mcp.<you>.workers.dev`.
-3. **Prints exactly what to type into Oura's developer-app form**, including the redirect URI, privacy and terms links, and which scopes to tick. You paste back the Client ID and Secret, and it **verifies them with Oura** before saving.
-4. **Asks for your timezone**, detected automatically, so "today" and "last 7 days" mean your days.
-5. **Locks the server to your Oura account.** It opens `/setup`, where you sign in to Oura and see your user ID. You paste the ID back.
+2. **Deploys** and creates its storage. You get a URL like `https://personal-oura-mcp.<you>.workers.dev`.
+3. **Prints exactly what to type into Oura's developer-app form**, then **verifies your Client ID and Secret with Oura** before saving them as Cloudflare secrets.
+4. **Asks for your timezone**, which it detects automatically.
+5. **Locks the server to your Oura account.** It opens `/setup`, you sign in to Oura, and paste back the ID it shows.
+6. **Confirms** the server reports itself ready.
 
-Then add it to Claude:
+Then run `npm run doctor` at any time for a health check.
+
+### Option C: let your AI agent do it
+
+In [Claude Code](https://claude.com/claude-code), or any agent with a terminal, say:
+
+> Set up https://github.com/Jerebearz/oura-mcp-for-claude for me. Follow its AGENTS.md.
+
+The agent runs the commands and checks progress with `npm run doctor -- --json`. You only do the browser parts: the Cloudflare login, the Oura form and the Oura sign-in. You never paste secrets into the chat.
+
+### Add it to Claude
 
 1. Go to **claude.ai → Settings → Connectors → Add custom connector**.
 2. Fill in:
    - **Name:** `Oura`
-   - **URL:** `https://personal-oura-mcp.<you>.workers.dev/mcp`
+   - **URL:** `https://<your-worker>.workers.dev/mcp`
    - Leave the OAuth fields empty.
 3. Click **Connect**, then **Continue to Oura**, then sign in and approve.
 4. Enable the connector in a chat. It syncs to the Claude mobile apps automatically.
 
-Your computer doesn't need to stay on. The server runs on Cloudflare, and normal personal use fits easily in Cloudflare's free plan.
-
-### Let Claude set it up for you
-
-In [Claude Code](https://claude.com/claude-code), or any coding agent with a terminal, say:
-
-> Set up https://github.com/Jerebearz/oura-mcp-for-claude for me. Follow its AGENTS.md.
-
-The agent runs the commands and explains each step. You only do the browser parts: the Cloudflare login, the Oura form and the Oura sign-in.
+Your computer doesn't need to stay on. The server runs on Cloudflare, and personal use fits easily in the free plan.
 
 ---
 
@@ -100,9 +120,11 @@ Claude ──refresh──▶ /token ──▶ Oura tokens refreshed automatical
 - **The consent page** follows MCP's confused-deputy guidance: it can't be framed or forged, and the state is bound to your browser.
 - **Public pages:**
   - the OAuth endpoints (`/authorize`, `/callback`, `/token`, `/register`, `/.well-known/*`),
-  - static `/`, `/privacy` and `/terms` pages, which the Oura form asks for,
+  - `/` (setup checklist until configured) and `/status` (the same as JSON),
+  - static `/privacy` and `/terms` pages, which the Oura form asks for,
   - `/setup`, which only works until your Oura ID is set and then switches itself off.
-- **All secrets live in Cloudflare secrets**, never in code: `OURA_CLIENT_ID`, `OURA_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`, `ALLOWED_OURA_USER_ID` and `TIMEZONE`.
+- **All settings live in Cloudflare secrets**, never in code: `OURA_CLIENT_ID`, `OURA_CLIENT_SECRET`, `ALLOWED_OURA_USER_ID` and `TIMEZONE`. The cookie-signing key is generated automatically and kept in your KV. You can set `COOKIE_ENCRYPTION_KEY` yourself if you prefer.
+- **`/` and `/status`** only report *whether* settings exist (✅/⬜), never their values.
 
 Built on Cloudflare's [`agents`](https://www.npmjs.com/package/agents) `createMcpHandler` (stateless Streamable HTTP) and MCP SDK v2.
 
@@ -116,6 +138,7 @@ Built on Cloudflare's [`agents`](https://www.npmjs.com/package/agents) `createMc
 | Change the Oura client ID/secret or timezone | `npm run setup -- --reconfigure` |
 | Rotate one secret | `npx wrangler secret put <NAME>`. It takes effect immediately, with no redeploy needed. |
 | See logs (status lines only) | `npx wrangler tail` |
+| Check everything is OK | `npm run doctor`, or open your Worker's home page |
 
 **Revoking access**, from lightest to most complete:
 1. In Claude, go to **Settings → Connectors → Oura** and click **Disconnect**.
@@ -128,7 +151,10 @@ Built on Cloudflare's [`agents`](https://www.npmjs.com/package/agents) `createMc
 ## Local development (optional)
 
 ```sh
-cp .dev.vars.example .dev.vars     # fill in the values (Windows: copy .dev.vars.example .dev.vars)
+cp .dev.vars.example .dev.vars     # Windows: copy .dev.vars.example .dev.vars
+# fill in the values, and add these two lines:
+#   ALLOWED_OURA_USER_ID=          (empty at first; the login page shows your ID)
+#   PUBLIC_BASE_URL=http://localhost:8788
 npm run dev                        # http://localhost:8788
 npx @modelcontextprotocol/inspector@latest
 ```
@@ -150,7 +176,8 @@ These are real problems hit during setup, and their fixes.
 |---|---|
 | **"Oura sign-in failed: could not exchange the authorization code"** / `401 invalid_client` in logs | The Client Secret doesn't match the Oura app. It was probably regenerated after you copied it. Copy it again, or regenerate it, then run `npm run setup -- --reconfigure`. The setup script checks the pair with Oura before saving. |
 | **"Access denied"** after the Oura login | You signed in with a different Oura account than the allowlisted one. The page shows both IDs so you can compare. |
-| **"Setup: allowlist not configured"** | `ALLOWED_OURA_USER_ID` isn't set. Copy the ID shown and run `npx wrangler secret put ALLOWED_OURA_USER_ID`, or finish `npm run setup`. |
+| **"Setup: allowlist not configured"** | `ALLOWED_OURA_USER_ID` isn't set. Copy the ID shown and run `npx wrangler secret put ALLOWED_OURA_USER_ID`, or add it as a secret in the Cloudflare dashboard. |
+| Not sure what's missing | Open your Worker's home page, or run `npm run doctor`. |
 | One tool returns **401/403** while others work | That scope wasn't ticked in your Oura app. SpO2, Stress and Heart Health are easy to miss. Tick it, then disconnect and reconnect in Claude. |
 | **"Invalid redirect URI"** in the MCP Inspector | The Inspector reused an old registration. Close **all** private windows, then open the Inspector in a new private window and add the server again. |
 | Local server **hangs** and pages never load (Windows) | Clicking inside a PowerShell window pauses the program in it ("Select" mode). Press **Esc** in that window, and from then on only click its title bar. |
@@ -158,6 +185,15 @@ These are real problems hit during setup, and their fixes.
 | Local login works at `localhost` but not `127.0.0.1` | Use `http://localhost:8788` everywhere. Oura's redirect URI must match exactly. |
 | Inspector says **"PORT IS IN USE"** | An old Inspector is still running. Close its window, or on Windows run `Get-NetTCPConnection -LocalPort 6274 -State Listen \| % { Stop-Process -Id $_.OwningProcess -Force }`. |
 | Windows: `open` is not recognized | Use `notepad <file>` instead of `open -e`. |
+
+---
+
+## For AI agents and tools
+
+- **[`AGENTS.md`](AGENTS.md)** covers setup, diagnosing problems, the architecture, the rules to keep and how to add a tool. `CLAUDE.md` points to it.
+- **[`llms.txt`](llms.txt)** is a short, machine-readable summary of this repo.
+- **`npm run doctor -- --json`** is a non-interactive health check with a `next_step` field. It never prints secrets.
+- **`GET <worker>/status`** returns JSON with the deployment's readiness, its Oura form values and the next step.
 
 ---
 
@@ -171,7 +207,9 @@ These are real problems hit during setup, and their fixes.
 
 **Can I use a different timezone, or move?** Yes. Run `npm run setup -- --reconfigure`, or `npx wrangler secret put TIMEZONE`, with an IANA name like `Europe/London`. Daylight saving is handled.
 
-**Can I add more tools?** Yes. See `src/tools.ts` and `AGENTS.md`.
+**Can I add more tools?** Yes. See `src/tools.ts` and `AGENTS.md`. Pull requests are welcome.
+
+**How is this different from other Oura MCP servers?** Most run locally on your computer (stdio), so they don't work in the Claude mobile apps. This one is a remote server with OAuth and a single-user lock, made to be added as a Claude custom connector.
 
 ## License
 

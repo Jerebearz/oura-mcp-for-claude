@@ -1,0 +1,39 @@
+name: Setup or bug report
+description: Something isn't working with your Oura connector
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **Never paste your Oura Client Secret, tokens, or `.dev.vars` here.** Your Oura user ID and workers.dev URL are fine to share.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `npm run doctor`
+      description: Run it in the project folder and paste the result (it never prints secrets).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw (error page text or a screenshot without secrets).
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it fail?
+      options:
+        - npm run setup
+        - Deploy to Cloudflare button
+        - Connecting in Claude (OAuth / Oura login)
+        - A tool returned an error
+        - Local development (npm run dev / Inspector)
+        - Other
+  - type: input
+    id: os
+    attributes:
+      label: OS and Node version
+      placeholder: "Windows 11, Node 22.11"

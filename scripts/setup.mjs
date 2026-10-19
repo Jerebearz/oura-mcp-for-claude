@@ -9,8 +9,7 @@
  * `wrangler secret put` over stdin.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import readline from "node:readline";
@@ -188,6 +187,8 @@ async function main() {
 	}
 	baseUrl = baseUrl.replace(/\/+$/, "");
 	console.log(green(`✓ Live at ${baseUrl}`));
+	// Remember the URL for `npm run doctor` (gitignored).
+	writeFileSync(".oura-mcp.json", `${JSON.stringify({ url: baseUrl }, null, 2)}\n`);
 
 	const secrets = existingSecrets();
 
@@ -236,16 +237,8 @@ ${yellow("Keep the Client Secret private: don't paste it into chats or screensho
 		}
 	}
 
-	// 4. Cookie signing key
-	step(4, "Signing key");
-	if (secrets.has("COOKIE_ENCRYPTION_KEY")) {
-		console.log(green("✓ Already set"));
-	} else {
-		putSecret("COOKIE_ENCRYPTION_KEY", randomBytes(32).toString("hex"));
-	}
-
-	// 5. Timezone
-	step(5, "Timezone for dates");
+	// 4. Timezone
+	step(4, "Timezone for dates");
 	if (!reconfigure && secrets.has("TIMEZONE")) {
 		console.log(green("✓ Already set") + " (run with --reconfigure to change it)");
 	} else {
@@ -258,8 +251,8 @@ ${yellow("Keep the Client Secret private: don't paste it into chats or screensho
 		putSecret("TIMEZONE", tz);
 	}
 
-	// 6. Owner (allowlist)
-	step(6, "Lock it to your Oura account");
+	// 5. Owner (allowlist)
+	step(5, "Lock it to your Oura account");
 	if (secrets.has("ALLOWED_OURA_USER_ID")) {
 		console.log(green("✓ Already locked to an Oura account"));
 	} else {
@@ -272,6 +265,23 @@ ${yellow("Keep the Client Secret private: don't paste it into chats or screensho
 		putSecret("ALLOWED_OURA_USER_ID", id);
 		console.log("Only this Oura account can connect now, and /setup has switched itself off.");
 	}
+
+	// Verify via the server's own status endpoint (booleans only).
+	step(6, "Check");
+	let ready = false;
+	for (let attempt = 0; attempt < 5 && !ready; attempt++) {
+		try {
+			const res = await fetch(`${baseUrl}/status`, { headers: { Accept: "application/json" } });
+			const status = await res.json();
+			ready = status.ready === true;
+			if (!ready && attempt === 4) console.log(yellow(`Not ready yet: ${status.next_step}`));
+		} catch {
+			// new settings can take a few seconds to go live
+		}
+		if (!ready) await new Promise((r) => setTimeout(r, 3000));
+	}
+	if (ready) console.log(green("✓ Server reports it is fully configured"));
+	else console.log(yellow(`Couldn't confirm yet. Check ${baseUrl} in a browser, or run: npm run doctor`));
 
 	// Done
 	console.log(`\n${green(bold("All set!"))}
@@ -286,6 +296,7 @@ ${bold("Add it to Claude")}
      It also works in the Claude mobile apps.
 
 ${bold("Later")}
+  Health check: npm run doctor
   Update:      git pull && npm install && npm run deploy
   Change keys: npm run setup -- --reconfigure
   Remove:      npx wrangler delete   (and delete the app in the Oura developer portal)

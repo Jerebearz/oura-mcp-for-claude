@@ -1,12 +1,7 @@
-# Copy to .dev.vars for local testing with `npm run dev`. Never commit .dev.vars.
-# (For the deployed server, `npm run setup` stores these as Cloudflare secrets.)
+# Settings for your Oura connector. The Deploy to Cloudflare button asks for these.
+# For local testing, copy this file to .dev.vars and also add:
+#   ALLOWED_OURA_USER_ID=        (leave empty at first; the login page shows your ID)
+#   PUBLIC_BASE_URL=http://localhost:8788
 OURA_CLIENT_ID=
 OURA_CLIENT_SECRET=
-# 32+ random characters: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-COOKIE_ENCRYPTION_KEY=
-# Your Oura user ID. Leave empty at first: the login page will show it to you.
-ALLOWED_OURA_USER_ID=
-# IANA timezone used for dates, e.g. Asia/Hong_Kong, Europe/London, America/New_York
-TIMEZONE=UTC
-# Pin the origin locally so localhost and 127.0.0.1 behave the same.
-PUBLIC_BASE_URL=http://localhost:8788
+TIMEZONE=

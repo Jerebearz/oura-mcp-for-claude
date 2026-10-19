@@ -10,7 +10,8 @@ export function normalizeOuraUserId(value: string): string {
 /** True only when ALLOWED_OURA_USER_ID is set and matches the Oura user ID. */
 export function isAllowedOuraUser(env: { ALLOWED_OURA_USER_ID?: string }, ouraUserId: unknown): boolean {
 	const allowed = normalizeOuraUserId(env.ALLOWED_OURA_USER_ID ?? "");
-	return allowed.length > 0 && typeof ouraUserId === "string" && normalizeOuraUserId(ouraUserId) === allowed;
+	if (allowed.length === 0 || allowed === "pending") return false;
+	return typeof ouraUserId === "string" && normalizeOuraUserId(ouraUserId) === allowed;
 }
 
 /** A non-revealing hint about the configured ID, to help spot copy mistakes. */

@@ -8,10 +8,19 @@ import {
 import { describeAllowedId, isAllowedOuraUser } from "./allowlist";
 import { publicBaseUrl } from "./base-url";
 import { OURA_AUTHORIZE_URL, OURA_SCOPES } from "./config";
-import { htmlHeaders, renderConsentPage, renderErrorPage, renderOuraIdPage, renderStaticPage } from "./consent-page";
+import {
+	htmlHeaders,
+	renderConsentPage,
+	renderErrorPage,
+	renderHomePage,
+	renderOuraIdPage,
+	renderStaticPage,
+} from "./consent-page";
 import { OuraApiError, OuraClient } from "./oura/client";
 import { exchangeCode, OuraTokenError, type OuraTokens } from "./oura/tokens";
 import type { Props } from "./props";
+import { configStatus, cookieSigningKey, isSet } from "./settings";
+import { REPO_URL, VERSION } from "./version";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
@@ -19,8 +28,8 @@ function errorPage(status: number, title: string, message: string, headers?: Hea
 	return new Response(renderErrorPage(title, message), { status, headers: htmlHeaders(headers) });
 }
 
-function rememberOptions(env: Env) {
-	return { secret: env.COOKIE_ENCRYPTION_KEY };
+async function rememberOptions(env: Env) {
+	return { secret: await cookieSigningKey(env) };
 }
 
 function callbackUrl(env: Env, request: Request): string {
@@ -28,7 +37,7 @@ function callbackUrl(env: Env, request: Request): string {
 }
 
 function isOwnerConfigured(env: Env): boolean {
-	return (env.ALLOWED_OURA_USER_ID ?? "").trim().length > 0;
+	return isSet(env.ALLOWED_OURA_USER_ID);
 }
 
 function ouraAuthorizeUrl(env: Env, request: Request, state: string, scopes: readonly string[]): string {
@@ -98,7 +107,7 @@ async function identifyOuraUser(
 async function getAuthorize(request: Request, env: AuthEnv): Promise<Response> {
 	const oauth = env.OAUTH_PROVIDER;
 	const authRequest = await oauth.parseAuthRequest(request);
-	if (await oauth.isConsentRemembered(request, authRequest, rememberOptions(env))) {
+	if (await oauth.isConsentRemembered(request, authRequest, await rememberOptions(env))) {
 		return redirectToOura(oauth, env, request, authRequest);
 	}
 	const details = await oauth.describeConsent(authRequest);
@@ -114,7 +123,7 @@ async function postAuthorize(request: Request, env: AuthEnv): Promise<Response> 
 		const denied = await oauth.denyConsent(request, handle);
 		return new Response(null, { status: 302, headers: denied.headers });
 	}
-	const approved = await oauth.approveConsent(request, handle, { remember: rememberOptions(env) });
+	const approved = await oauth.approveConsent(request, handle, { remember: await rememberOptions(env) });
 	return redirectToOura(oauth, env, request, approved.request, approved.headers);
 }
 
@@ -202,7 +211,7 @@ function getSetup(request: Request, env: Env): Response {
 	if (isOwnerConfigured(env)) {
 		return errorPage(404, "Already set up", "This server already has an owner, so setup is turned off.");
 	}
-	if (!(env.OURA_CLIENT_ID ?? "").trim() || !(env.OURA_CLIENT_SECRET ?? "").trim()) {
+	if (!isSet(env.OURA_CLIENT_ID) || !isSet(env.OURA_CLIENT_SECRET)) {
 		return errorPage(
 			503,
 			"Setup not ready",
@@ -243,10 +252,53 @@ async function finishSetup(request: Request, env: Env): Promise<Response> {
 	);
 }
 
+// --- Home page and machine-readable status -------------------------------
+// Both report only which settings exist (booleans), never their values.
+
+function homePage(request: Request, env: Env): Response {
+	const status = configStatus(env);
+	return new Response(
+		renderHomePage({ baseUrl: publicBaseUrl(env, request), version: VERSION, repoUrl: REPO_URL, ...status }),
+		{ headers: htmlHeaders() },
+	);
+}
+
+function statusJson(request: Request, env: Env): Response {
+	const base = publicBaseUrl(env, request);
+	const s = configStatus(env);
+	const next = !s.ouraApp
+		? "Create the Oura app (see oura_app_form) and set secrets OURA_CLIENT_ID and OURA_CLIENT_SECRET."
+		: !s.owner
+			? `Open ${base}/setup, sign in to Oura, and set the secret ALLOWED_OURA_USER_ID to the ID shown.`
+			: `Ready. Add ${base}/mcp as a custom connector in Claude.`;
+	const body = {
+		name: "oura-mcp-for-claude",
+		version: VERSION,
+		source: REPO_URL,
+		ready: s.ouraApp && s.owner,
+		checks: { oura_app_credentials: s.ouraApp, owner_locked: s.owner, timezone_set: s.timezoneSet },
+		timezone: s.timezone,
+		mcp_url: `${base}/mcp`,
+		setup_url: s.owner ? null : `${base}/setup`,
+		oura_app_form: {
+			website: base,
+			privacy_policy: `${base}/privacy`,
+			terms_of_service: `${base}/terms`,
+			redirect_uri: `${base}/callback`,
+			scopes: [...OURA_SCOPES],
+		},
+		next_step: next,
+	};
+	return new Response(JSON.stringify(body, null, 2), {
+		headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+	});
+}
+
 /**
  * Unprotected routes: the OAuth flow (/authorize, /callback), one-time owner
- * setup (/setup, off once ALLOWED_OURA_USER_ID is set), and static home/privacy/
- * terms pages that the Oura developer app form asks for. `/token`, `/register`
+ * setup (/setup, off once ALLOWED_OURA_USER_ID is set), the home page (setup
+ * checklist until configured), /status (JSON, booleans only), and the
+ * privacy/terms pages that the Oura developer app form asks for. `/token`, `/register`
  * and `.well-known/*` are served by the OAuth provider itself.
  */
 export const authHandler = {
@@ -262,10 +314,11 @@ export const authHandler = {
 				return await getCallback(request, env);
 			}
 			if (pathname === "/setup" && request.method === "GET") return getSetup(request, env);
-			if (request.method === "GET" && (pathname === "/" || pathname === "/privacy" || pathname === "/terms")) {
-				const page = pathname === "/" ? "home" : pathname === "/privacy" ? "privacy" : "terms";
-				return new Response(renderStaticPage(page), { headers: htmlHeaders() });
+			if (request.method === "GET" && (pathname === "/privacy" || pathname === "/terms")) {
+				return new Response(renderStaticPage(pathname === "/privacy" ? "privacy" : "terms"), { headers: htmlHeaders() });
 			}
+			if (request.method === "GET" && pathname === "/") return homePage(request, env);
+			if (request.method === "GET" && pathname === "/status") return statusJson(request, env);
 		} catch (error) {
 			if (error instanceof AuthorizationError && error.redirectTo) {
 				return Response.redirect(error.redirectTo, 302);

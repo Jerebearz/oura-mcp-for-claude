@@ -1,37 +1,74 @@
 {
 	"name": "oura-mcp-for-claude",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Your own private, read-only Oura Ring MCP server for Claude (web, desktop and mobile), deployed to Cloudflare Workers with OAuth and a single-user lock.",
 	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"homepage": "https://github.com/Jerebearz/oura-mcp-for-claude#readme",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/Jerebearz/oura-mcp-for-claude.git"
 	},
+	"bugs": {
+		"url": "https://github.com/Jerebearz/oura-mcp-for-claude/issues"
+	},
 	"keywords": [
 		"mcp",
+		"mcp-server",
+		"remote-mcp",
 		"model-context-protocol",
 		"oura",
 		"oura-ring",
+		"oura-api",
 		"claude",
 		"claude-connector",
+		"claude-mobile",
 		"cloudflare-workers",
 		"oauth",
 		"health",
 		"sleep",
-		"hrv"
+		"hrv",
+		"readiness",
+		"quantified-self",
+		"wearables"
 	],
 	"engines": {
 		"node": ">=20"
 	},
 	"scripts": {
 		"setup": "node scripts/setup.mjs",
+		"doctor": "node scripts/doctor.mjs",
 		"dev": "wrangler dev",
 		"deploy": "wrangler deploy",
-		"cf-typegen": "wrangler types",
+		"cf-typegen": "wrangler types --env-file .dev.vars.example",
 		"type-check": "tsc --noEmit",
 		"test": "vitest run"
+	},
+	"cloudflare": {
+		"label": "Oura MCP for Claude",
+		"products": [
+			"Workers",
+			"KV"
+		],
+		"categories": [
+			"ai",
+			"mcp"
+		],
+		"bindings": {
+			"OAUTH_KV": {
+				"description": "Stores your Claude connector's OAuth grants (tokens are hashed; Oura tokens are encrypted). Keep the default name."
+			},
+			"OURA_CLIENT_ID": {
+				"description": "Client ID of your app at [developer.ouraring.com/applications](https://developer.ouraring.com/applications). No app yet? Enter `pending` and your Worker's home page will walk you through it after deploy."
+			},
+			"OURA_CLIENT_SECRET": {
+				"description": "Client Secret of the same Oura app (or `pending`). Kept as an encrypted Worker secret."
+			},
+			"TIMEZONE": {
+				"description": "Your timezone as an IANA name, e.g. `Asia/Hong_Kong`, `Europe/London`, `America/New_York`. Used so \"today\" and \"last 7 days\" mean your days."
+			}
+		}
 	},
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^1.2.3",

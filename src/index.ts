@@ -6,6 +6,7 @@ import { authHandler } from "./auth-handler";
 import { publicBaseUrl } from "./base-url";
 import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./config";
 import { resolveTimezone } from "./dates";
+import { VERSION } from "./version";
 import { OuraClient } from "./oura/client";
 import { OuraTokenError, refreshTokens } from "./oura/tokens";
 import { isProps, type Props } from "./props";
@@ -23,7 +24,7 @@ function currentProps(): Props {
 function createServer(): McpServer {
 	const timeZone = resolveTimezone(workerEnv.TIMEZONE);
 	const server = new McpServer(
-		{ name: "personal-oura-mcp", version: "0.2.0" },
+		{ name: "oura-mcp-for-claude", version: VERSION },
 		{
 			instructions: `Read-only access to the user's own Oura Ring data. All dates are calendar days (YYYY-MM-DD) in ${timeZone}. Each tool defaults to the last 7 days and accepts at most 90 days per call.`,
 		},

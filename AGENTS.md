@@ -1,6 +1,8 @@
 # AGENTS.md: guide for AI coding agents
 
-This repo is a **single-user, read-only Oura Ring MCP server** on Cloudflare Workers. People usually arrive here asking an agent to "set this up for me" or "add a tool". Follow this file.
+This repo is a **single-user, read-only Oura Ring MCP server** on Cloudflare Workers. People usually arrive here asking an agent to "set this up for me", "why isn't my Oura connector working" or "add a tool". Follow this file. A shorter summary is in `llms.txt`.
+
+**Fastest way to see where a user stands:** `npm run doctor -- --json`, run in the project folder. It's non-interactive and never prints secrets. Or `curl https://<worker>/status`. Both return a `next_step`.
 
 ## Helping someone set it up
 
@@ -19,9 +21,13 @@ Goal: their own deployment at `https://personal-oura-mcp.<their-subdomain>.worke
    - runs `wrangler deploy --x-auto-create` (auto-creates the `OAUTH_KV` namespace),
    - prints the exact Oura developer-app form values (website, privacy, terms, redirect URI and scopes, all derived from the deployed URL),
    - asks for the Oura Client ID and Secret, **verifies them against Oura's token endpoint**, and stores them with `wrangler secret put`,
-   - generates `COOKIE_ENCRYPTION_KEY`, asks for `TIMEZONE` (IANA name),
-   - opens `<url>/setup` so the user can sign in and read their **Oura user ID**, then stores `ALLOWED_OURA_USER_ID`.
-3. Tell them to add the connector: **claude.ai → Settings → Connectors → Add custom connector**, URL `<url>/mcp`, OAuth fields empty, then **Connect**.
+   - asks for `TIMEZONE` (IANA name),
+   - opens `<url>/setup` so the user can sign in and read their **Oura user ID**, then stores `ALLOWED_OURA_USER_ID`,
+   - confirms readiness via `<url>/status`, and saves the URL to `.oura-mcp.json` (gitignored) for `npm run doctor`.
+3. Verify with `npm run doctor -- --json`. Expect `"ok": true`.
+4. Tell them to add the connector: **claude.ai → Settings → Connectors → Add custom connector**, URL `<url>/mcp`, OAuth fields empty, then **Connect**.
+
+**No terminal?** Point them to the **Deploy to Cloudflare** button in the README. They enter `pending` for the Oura fields if they have no app yet. Then the deployed Worker's home page (`https://<worker>/`) is a live checklist with the exact Oura form values, and it explains where to add each secret in the Cloudflare dashboard.
 
 **Rules while helping:**
 - **Never ask the user to paste the Oura Client Secret, the cookie key or any token into the chat**, and never echo them. They type secrets into the setup script or `wrangler secret put`, which reads stdin. If a secret does land in the chat or a screenshot, tell them to regenerate it in the Oura portal.
@@ -36,7 +42,7 @@ Goal: their own deployment at `https://personal-oura-mcp.<their-subdomain>.worke
 - Use `localhost`, not `127.0.0.1`, in local URLs. Oura redirect URIs must match exactly.
 - Notepad may save `.dev.vars` as `.dev.vars.txt`. Check with `dir .dev*`.
 
-**Diagnosing login failures:** the Worker logs only status lines (`npx wrangler tail` for production, or the `npm run dev` window locally).
+**Diagnosing:** start with `npm run doctor -- --json` or `GET <worker>/status`. For login failures, the Worker logs only status lines (`npx wrangler tail` for production, or the `npm run dev` window locally).
 - `oura token endpoint: HTTP 401 invalid_client` means the Client ID/Secret pair is wrong. Usually the secret was regenerated after copying. Re-run `npm run setup -- --reconfigure`.
 - The "Access denied" page shows the signed-in ID and a hint about the configured one.
 - 401/403 on a single tool means that Oura scope isn't enabled on their Oura app.
@@ -48,7 +54,8 @@ Goal: their own deployment at `https://personal-oura-mcp.<their-subdomain>.worke
 src/index.ts          OAuthProvider + stateless MCP handler (agents/mcp/server createMcpHandler, MCP SDK v2);
                       tokenExchangeCallback refreshes Oura tokens; allowlist re-checked per request
 src/auth-handler.ts   /authorize (consent page), /callback (Oura code exchange + allowlist),
-                      /setup (owner ID discovery, only while ALLOWED_OURA_USER_ID is unset), /, /privacy, /terms
+                      /setup (owner ID discovery, only while ALLOWED_OURA_USER_ID is unset),
+                      / (setup checklist until configured), /status (JSON, booleans only), /privacy, /terms
 src/tools.ts          Tool definitions (zod v4 schemas, readOnlyHint annotations), date handling, error mapping
 src/oura/client.ts    Read-only Oura API client (pagination, readable errors, never logs bodies)
 src/oura/tokens.ts    Oura token exchange/refresh (client_secret_post, HTTP Basic fallback)
@@ -56,7 +63,13 @@ src/oura/transform.ts Compact per-endpoint field pickers, heart-rate aggregation
 src/dates.ts          Timezone-aware (IANA, DST-safe) date ranges, default 7 days, max 90
 src/allowlist.ts      Owner check (normalises copy/paste artifacts)
 src/base-url.ts       Public origin = request origin, or PUBLIC_BASE_URL if set
+src/settings.ts       Config status (booleans), "pending" placeholder, auto-generated cookie key in KV
+src/consent-page.ts   HTML: consent page, home/checklist page, ID page, privacy/terms
+src/env.d.ts          Optional env keys not prompted by the Deploy button
 scripts/setup.mjs     Interactive deploy + configuration
+scripts/doctor.mjs    Non-interactive health check (--json for agents)
+.dev.vars.example     Keys the Deploy button prompts for (keep it to OURA_CLIENT_ID, OURA_CLIENT_SECRET, TIMEZONE)
+package.json          `cloudflare.bindings` = field descriptions shown on the Deploy button page
 ```
 
 Key libraries, and their **current** APIs (check `node_modules/*/README.md` and `docs/`, not memory):
@@ -70,7 +83,7 @@ Key libraries, and their **current** APIs (check `node_modules/*/README.md` and 
 - **Read-only.** Only GET requests to Oura. No tools that write.
 - **Never log health data, tokens or secrets.** Log status codes and error names only.
 - **Single user.** `isAllowedOuraUser` is checked at `/callback`, in `tokenExchangeCallback` and in the `/mcp` handler. Keep all three.
-- **No new unauthenticated endpoints** beyond the OAuth flow, `/setup` (self-disabling) and the static pages.
+- **No new unauthenticated endpoints** beyond the OAuth flow, `/setup` (self-disabling), `/`, `/status` and the static pages. `/` and `/status` must only expose booleans, never setting values.
 - In Workers, call `fetch` unbound. `this.fetcher(...)` with the global `fetch` throws "Illegal invocation" (there's a regression test).
 - Keep tool responses compact. Don't return Oura's raw payloads.
 
@@ -89,5 +102,8 @@ npm test            # vitest
 npm run type-check  # tsc --noEmit
 npm run dev         # local server on http://localhost:8788 (needs .dev.vars)
 npm run deploy      # wrangler deploy
-npm run cf-typegen  # regenerate worker-configuration.d.ts after changing bindings/.dev.vars keys
+npm run doctor      # health check (add -- --json for machine-readable output)
+npm run cf-typegen  # regenerate worker-configuration.d.ts (from .dev.vars.example) after changing bindings
 ```
+
+CI (`.github/workflows/ci.yml`) runs the type-check, the tests and a `wrangler deploy --dry-run` bundle check on every push and PR. Keep them green.

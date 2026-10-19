@@ -29,6 +29,13 @@ function layout(title: string, body: string): string {
   .id { display: block; font: 600 1.05rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f5f5f4; border: 1px solid #d6d3d1; border-radius: 8px; padding: 12px; word-break: break-all; user-select: all; -webkit-user-select: all; cursor: text; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
   h2 { font-size: 1rem; margin: 20px 0 6px; }
+  ul.check { list-style: none; padding: 0; margin: 8px 0; }
+  ul.check li { padding: 6px 0; line-height: 1.4; }
+  table.form { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.form td { padding: 5px 4px; vertical-align: top; border-bottom: 1px solid #e7e5e4; }
+  table.form td:first-child { white-space: nowrap; color: #57534e; padding-right: 10px; }
+  table.form code { word-break: break-all; user-select: all; -webkit-user-select: all; }
+  ol { padding-left: 20px; line-height: 1.5; }
   .actions { display: flex; gap: 12px; margin-top: 20px; }
   button { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #d6d3d1; font-size: 1rem; cursor: pointer; background: #fff; }
   button.primary { background: #1c1917; color: #fff; border-color: #1c1917; }
@@ -112,12 +119,66 @@ const TERMS_HTML = `<h1>Terms</h1>
 <p>It is provided as-is, without warranty, for personal informational use. It is not a medical device and does not give medical advice.</p>
 <p>Use of Oura data is also subject to Oura's own terms and API agreement.</p>`;
 
-const HOME_HTML = `<h1>Personal Oura MCP server</h1>
-<p>A private, read-only <a href="https://modelcontextprotocol.io">MCP</a> server that lets its owner's Claude read their own Oura Ring data.</p>
-<p class="muted">Only the owner's Oura account can connect. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://github.com/Jerebearz/oura-mcp-for-claude">Source</a></p>`;
+export function renderStaticPage(page: "privacy" | "terms"): string {
+	return layout(page === "privacy" ? "Privacy" : "Terms", page === "privacy" ? PRIVACY_HTML : TERMS_HTML);
+}
 
-export function renderStaticPage(page: "home" | "privacy" | "terms"): string {
-	const body = page === "privacy" ? PRIVACY_HTML : page === "terms" ? TERMS_HTML : HOME_HTML;
-	const title = page === "privacy" ? "Privacy" : page === "terms" ? "Terms" : "Personal Oura MCP";
-	return layout(title, body);
+export interface HomePageInfo {
+	baseUrl: string;
+	version: string;
+	repoUrl: string;
+	ouraApp: boolean;
+	owner: boolean;
+	timezoneSet: boolean;
+	timezone: string;
+}
+
+const tick = (ok: boolean) => (ok ? "✅" : "⬜");
+
+/**
+ * Home page. Fully configured: a short description plus the connector URL.
+ * Otherwise: a setup checklist with the exact Oura form values for this
+ * deployment. Shows only whether settings exist, never their values.
+ */
+export function renderHomePage(i: HomePageInfo): string {
+	const b = escapeHtml(i.baseUrl);
+	const links = `<p class="muted"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="${escapeHtml(i.repoUrl)}">Source</a> · v${escapeHtml(i.version)}</p>`;
+	if (i.ouraApp && i.owner) {
+		return layout(
+			"Personal Oura MCP",
+			`<h1>Personal Oura MCP server</h1>
+<p>A private, read-only <a href="https://modelcontextprotocol.io">MCP</a> server that lets its owner's Claude read their own Oura Ring data. Only the owner's Oura account can connect.</p>
+<p class="muted">Claude connector URL:</p>
+<code class="id">${b}/mcp</code>
+${links}`,
+		);
+	}
+	const secretHelp = `In the <a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages">Cloudflare dashboard</a>: <b>Workers &amp; Pages → this Worker → Settings → Variables and Secrets → Add</b> (type <i>Secret</i>). Or run <code>npx wrangler secret put NAME</code> in the project folder.`;
+	return layout(
+		"Finish setting up",
+		`<h1>Almost there: finish setup</h1>
+<p>This Oura connector is deployed. Complete these steps; this page updates as you go (refresh it).</p>
+<ul class="check">
+<li>${tick(i.ouraApp)} <b>1. Oura app credentials</b>: secrets <code>OURA_CLIENT_ID</code> and <code>OURA_CLIENT_SECRET</code></li>
+<li>${tick(i.owner)} <b>2. Lock to your Oura account</b>: secret <code>ALLOWED_OURA_USER_ID</code></li>
+<li>${tick(i.timezoneSet)} <b>Timezone</b> (optional): secret <code>TIMEZONE</code>, now <code>${escapeHtml(i.timezone)}</code></li>
+</ul>
+<h2>1. Create your Oura app</h2>
+<p>At <a href="https://developer.ouraring.com/applications">developer.ouraring.com/applications</a>, create an application with:</p>
+<table class="form">
+<tr><td>Website</td><td><code>${b}</code></td></tr>
+<tr><td>Privacy Policy</td><td><code>${b}/privacy</code></td></tr>
+<tr><td>Terms of Service</td><td><code>${b}/terms</code></td></tr>
+<tr><td>Redirect URI</td><td><code>${b}/callback</code></td></tr>
+<tr><td>Scopes</td><td>Personal, Daily, Heartrate, Workout, SpO2, Stress, Heart Health</td></tr>
+</table>
+<p>Then save its Client ID and Client Secret as the secrets <code>OURA_CLIENT_ID</code> and <code>OURA_CLIENT_SECRET</code>. ${secretHelp}</p>
+<h2>2. Lock it to your Oura account</h2>
+<p>${i.ouraApp ? `Open <a href="/setup"><b>${b}/setup</b></a>, sign in to Oura, and copy the user ID it shows. Save it as the secret <code>ALLOWED_OURA_USER_ID</code>.` : "Available after step 1."}</p>
+<h2>3. Add it to Claude</h2>
+<p>claude.ai → Settings → Connectors → <b>Add custom connector</b>, URL:</p>
+<code class="id">${b}/mcp</code>
+<p class="muted">Leave the OAuth fields empty, then click Connect. Works in the Claude mobile apps too.</p>
+${links}`,
+	);
 }
